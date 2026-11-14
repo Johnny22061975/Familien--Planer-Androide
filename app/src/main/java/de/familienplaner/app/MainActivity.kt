@@ -31,6 +31,8 @@ class MainActivity : ComponentActivity() {
     private var fileCb: ValueCallback<Array<Uri>>? = null
     private var geoCb: GeolocationPermissions.Callback? = null
     private var geoOrigin: String? = null
+    private var pendingDay: String? = null
+    private var pageReady = false
 
     private val picker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val data = if (r.resultCode == Activity.RESULT_OK) WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data) else null
@@ -46,6 +48,11 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun setToday(json: String) {
             getSharedPreferences("fp", Context.MODE_PRIVATE).edit().putString("today", json).apply()
+            WidgetProvider.refresh(applicationContext)
+        }
+        @JavascriptInterface
+        fun setMonths(json: String) {
+            getSharedPreferences("fp", Context.MODE_PRIVATE).edit().putString("months", json).apply()
             WidgetProvider.refresh(applicationContext)
         }
         @JavascriptInterface
@@ -74,6 +81,13 @@ class MainActivity : ComponentActivity() {
         setup(web)
         web.addJavascriptInterface(Bridge(), "FPNative")
         web.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(v: WebView, url: String?) {
+                if (url != null && url.startsWith("https://johnny22061975.github.io")) {
+                    pageReady = true
+                    val d = pendingDay
+                    if (d != null) { pendingDay = null; runOpenDay(d) }
+                }
+            }
             override fun shouldOverrideUrlLoading(v: WebView, r: WebResourceRequest): Boolean {
                 val h = r.url.host ?: return false
                 if (h.endsWith("github.io") || h.endsWith("firebaseapp.com") || h.endsWith("googleapis.com") || h.endsWith("google.com")) return false
@@ -114,7 +128,27 @@ class MainActivity : ComponentActivity() {
         }
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        handleDayIntent(intent)
         if (savedInstanceState != null) web.restoreState(savedInstanceState) else web.loadUrl("https://johnny22061975.github.io/")
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDayIntent(intent)
+    }
+
+    private fun handleDayIntent(i: Intent?) {
+        if (i == null) return
+        val d = i.getStringExtra("day") ?: return
+        i.removeExtra("day")
+        if (!Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(d)) return
+        if (pageReady) runOpenDay(d) else pendingDay = d
+    }
+
+    private fun runOpenDay(d: String) {
+        val js = "(function(){var n=0;var t=setInterval(function(){ if((window.fpOpenDay&&window.fpOpenDay('" + d + "'))||++n>40) clearInterval(t); },300);})()"
+        web.evaluateJavascript(js, null)
     }
 
     override fun onSaveInstanceState(o: Bundle) { super.onSaveInstanceState(o); web.saveState(o) }
