@@ -3,12 +3,15 @@ package de.familienplaner.app
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Message
+import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
@@ -50,17 +53,25 @@ class MainActivity : ComponentActivity() {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        web = WebView(this)
-        setContentView(web)
-        val s = web.settings
+    private fun setup(w: WebView) {
+        val s = w.settings
         s.javaScriptEnabled = true
         s.domStorageEnabled = true
         s.databaseEnabled = true
         s.mediaPlaybackRequiresUserGesture = false
         s.cacheMode = WebSettings.LOAD_DEFAULT
+        s.setSupportMultipleWindows(true)
+        s.javaScriptCanOpenWindowsAutomatically = true
         s.userAgentString = s.userAgentString + " FamilienPlanerApp/1.0"
+        CookieManager.getInstance().setAcceptCookie(true)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        web = WebView(this)
+        setContentView(web)
+        setup(web)
         web.addJavascriptInterface(Bridge(), "FPNative")
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(v: WebView, r: WebResourceRequest): Boolean {
@@ -83,6 +94,23 @@ class MainActivity : ComponentActivity() {
                 perms.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
             }
             override fun onPermissionRequest(r: PermissionRequest) { r.grant(r.resources) }
+            // Anmelde-Fenster (Google) als eigenes Fenster in der App öffnen
+            override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
+                val pop = WebView(this@MainActivity)
+                setup(pop)
+                pop.webViewClient = WebViewClient()
+                val dlg = Dialog(this@MainActivity, android.R.style.Theme_DeviceDefault_NoActionBar)
+                dlg.setContentView(pop)
+                pop.webChromeClient = object : WebChromeClient() {
+                    override fun onCloseWindow(w: WebView) { dlg.dismiss() }
+                }
+                dlg.setOnDismissListener { pop.destroy() }
+                dlg.show()
+                val tr = resultMsg.obj as WebView.WebViewTransport
+                tr.webView = pop
+                resultMsg.sendToTarget()
+                return true
+            }
         }
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
