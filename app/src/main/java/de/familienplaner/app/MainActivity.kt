@@ -57,6 +57,8 @@ class MainActivity : ComponentActivity() {
         }
         @JavascriptInterface
         fun isNative(): Boolean = true
+        @JavascriptInterface
+        fun setLocShare(on: Boolean) { runOnUiThread { setLocShareUi(on) } }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -171,6 +173,25 @@ class MainActivity : ComponentActivity() {
         return true
     }
 
+    private var locRunning = false
+    private fun setLocShareUi(on: Boolean) {
+        if (on == locRunning) return
+        val i = Intent(this, LocService::class.java)
+        if (on) {
+            val ok = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (!ok) return
+            LocService.cb = { l ->
+                val js = "window.fpNativeLoc&&window.fpNativeLoc(" + l.latitude + "," + l.longitude + "," + Math.round(l.accuracy) + ")"
+                runOnUiThread { try { web.evaluateJavascript(js, null) } catch (e: Exception) { } }
+            }
+            try { ContextCompat.startForegroundService(this, i); locRunning = true } catch (e: Exception) { }
+        } else {
+            LocService.cb = null
+            stopService(i)
+            locRunning = false
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -188,6 +209,11 @@ class MainActivity : ComponentActivity() {
     private fun runOpenDay(d: String) {
         val js = "(function(){var n=0;var t=setInterval(function(){ if((window.fpOpenDay&&window.fpOpenDay('" + d + "'))||++n>40) clearInterval(t); },300);})()"
         web.evaluateJavascript(js, null)
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) { LocService.cb = null; try { stopService(Intent(this, LocService::class.java)) } catch (e: Exception) { }; locRunning = false }
+        super.onDestroy()
     }
 
     override fun onSaveInstanceState(o: Bundle) { super.onSaveInstanceState(o); web.saveState(o) }
