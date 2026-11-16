@@ -11,6 +11,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Message
+import android.provider.MediaStore
+import androidx.core.content.FileProvider
+import java.io.File
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.JavascriptInterface
@@ -34,10 +37,54 @@ class MainActivity : ComponentActivity() {
     private var pendingDay: String? = null
     private var pageReady = false
 
+    private var camUri: Uri? = null
+    private var pendingChooser: WebChromeClient.FileChooserParams? = null
+
     private val picker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-        val data = if (r.resultCode == Activity.RESULT_OK) WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data) else null
+        var data: Array<Uri>? = null
+        if (r.resultCode == Activity.RESULT_OK) {
+            data = WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data)
+            val cu = camUri
+            if (data == null && cu != null) data = arrayOf(cu)
+        }
+        camUri = null
         fileCb?.onReceiveValue(data)
         fileCb = null
+    }
+    private val camPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+        val p = pendingChooser
+        pendingChooser = null
+        if (p != null) startChooser(p)
+    }
+
+    private fun wantsImage(p: WebChromeClient.FileChooserParams): Boolean {
+        val t = p.acceptTypes
+        if (t == null || t.isEmpty()) return true
+        return t.any { it.isEmpty() || it.startsWith("image") || it.contains("*/*") }
+    }
+
+    private fun startChooser(p: WebChromeClient.FileChooserParams) {
+        try {
+            val content = p.createIntent()
+            var cam: Intent? = null
+            val camOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            if (wantsImage(p) && camOk) {
+                val dir = File(cacheDir, "photos"); dir.mkdirs()
+                val f = File.createTempFile("foto_", ".jpg", dir)
+                val u = FileProvider.getUriForFile(this, "de.familienplaner.app.fp", f)
+                camUri = u
+                cam = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                    .putExtra(MediaStore.EXTRA_OUTPUT, u)
+                    .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val launch: Intent = if (cam != null && p.isCaptureEnabled) cam
+                else if (cam != null) Intent.createChooser(content, "Foto aufnehmen oder auswählen").putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf<android.os.Parcelable>(cam))
+                else content
+            picker.launch(launch)
+        } catch (e: Exception) {
+            camUri = null
+            fileCb?.onReceiveValue(null); fileCb = null
+        }
     }
     private val perms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
         geoCb?.invoke(geoOrigin, res.values.any { it }, false)
@@ -98,7 +145,9 @@ class MainActivity : ComponentActivity() {
             override fun onShowFileChooser(w: WebView, cb: ValueCallback<Array<Uri>>, p: FileChooserParams): Boolean {
                 fileCb?.onReceiveValue(null)
                 fileCb = cb
-                return try { picker.launch(p.createIntent()); true } catch (e: Exception) { fileCb = null; false }
+                val camOk = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+                if (wantsImage(p) && !camOk) { pendingChooser = p; camPerm.launch(Manifest.permission.CAMERA) } else startChooser(p)
+                return true
             }
             override fun onGeolocationPermissionsShowPrompt(origin: String, cb: GeolocationPermissions.Callback) {
                 val ok = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
