@@ -12,6 +12,18 @@ android {
         versionCode = 1
         versionName = "1.0"
     }
+    val ksPath = System.getenv("FP_KS_PATH")
+    if (ksPath != null && File(ksPath).exists()) {
+        signingConfigs {
+            create("fp") {
+                storeFile = File(ksPath)
+                storePassword = System.getenv("FP_KS_PASS")
+                keyAlias = System.getenv("FP_KS_ALIAS")
+                keyPassword = System.getenv("FP_KEY_PASS")
+            }
+        }
+        buildTypes { getByName("debug") { signingConfig = signingConfigs.getByName("fp") } }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
