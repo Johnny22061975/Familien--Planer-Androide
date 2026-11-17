@@ -106,6 +106,9 @@ class MainActivity : ComponentActivity() {
         fun isNative(): Boolean = true
         @JavascriptInterface
         fun setLocShare(on: Boolean) { runOnUiThread { setLocShareUi(on) } }
+        // App-Check-Debug-Token (kommt beim Bau aus dem GitHub-Secret FP_AC_DEBUG), nur für die eigene Seite
+        @JavascriptInterface
+        fun acDebug(): String = BuildConfig.AC_DEBUG
     }
 
     @SuppressLint("SetJavaScriptEnabled")
