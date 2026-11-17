@@ -20,24 +20,29 @@ jobs:
         env:
           KS_B64: ${{ secrets.FP_KS_B64 }}
           KS_PASS: ${{ secrets.FP_KS_PASS }}
+          KS_ALIAS: ${{ secrets.FP_KS_ALIAS }}
+          KEY_PASS: ${{ secrets.FP_KEY_PASS }}
         run: |
-          if [ -n "$KS_B64" ]; then
-            # Nur Base64-Zeichen behalten (Zeilenumbrueche, Leerzeichen usw. vom Kopieren fallen weg)
-            printf '%s' "$KS_B64" | tr -cd 'A-Za-z0-9+/=' | base64 -d > "$RUNNER_TEMP/fp.keystore"
-            if ! keytool -list -keystore "$RUNNER_TEMP/fp.keystore" -storepass "$KS_PASS" > /dev/null 2>&1; then
-              echo "::error::Schluessel oder FP_KS_PASS passt nicht. Secrets FP_KS_B64 und FP_KS_PASS pruefen."
-              exit 1
+          trim() { printf '%s' "$1" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+          if [ -z "$KS_B64" ]; then echo "Kein fester Schluessel hinterlegt, Debug-Signatur"; exit 0; fi
+          F="$RUNNER_TEMP/fp.keystore"
+          printf '%s' "$KS_B64" | tr -cd 'A-Za-z0-9+/=' | base64 -d > "$F" 2>/dev/null || true
+          P="$(trim "$KS_PASS")"; A="$(trim "$KS_ALIAS")"; K="$(trim "$KEY_PASS")"
+          echo "::add-mask::$P"; echo "::add-mask::$K"
+          echo "Pruefung: Schluesseldatei $(stat -c %s "$F") Bytes, Kennung $(sha256sum "$F" | cut -c1-8) (erwartet: 2724 Bytes, Kennung 07ffa478)"
+          echo "Pruefung: Laenge FP_KS_PASS ${#P}, FP_KEY_PASS ${#K}, Alias '$A'"
+          if ! keytool -list -keystore "$F" -storepass "$P" > /dev/null 2>&1; then
+            if [ "$(sha256sum "$F" | cut -c1-8)" != "07ffa478" ]; then
+              echo "::error::FP_KS_B64 ist falsch (Datei kaputt). FP_KS_B64 neu eintragen."
+            else
+              echo "::error::Schluesseldatei ist richtig, aber FP_KS_PASS passt nicht."
             fi
-            echo "Fester Schluessel geladen"
-            echo "FP_KS_PATH=$RUNNER_TEMP/fp.keystore" >> "$GITHUB_ENV"
-          else
-            echo "Kein fester Schluessel hinterlegt, Debug-Signatur"
+            exit 1
           fi
+          echo "Fester Schluessel geladen"
+          { echo "FP_KS_PATH=$F"; echo "FP_KS_PASS=$P"; echo "FP_KS_ALIAS=$A"; echo "FP_KEY_PASS=$K"; } >> "$GITHUB_ENV"
       - run: gradle assembleDebug --no-daemon
         env:
-          FP_KS_PASS: ${{ secrets.FP_KS_PASS }}
-          FP_KS_ALIAS: ${{ secrets.FP_KS_ALIAS }}
-          FP_KEY_PASS: ${{ secrets.FP_KEY_PASS }}
           FP_AC_DEBUG: ${{ secrets.FP_AC_DEBUG }}
       - uses: actions/upload-artifact@v4
         with:
