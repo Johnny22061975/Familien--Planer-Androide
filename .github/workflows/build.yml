@@ -19,9 +19,16 @@ jobs:
       - name: Fester Schluessel
         env:
           KS_B64: ${{ secrets.FP_KS_B64 }}
+          KS_PASS: ${{ secrets.FP_KS_PASS }}
         run: |
           if [ -n "$KS_B64" ]; then
-            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/fp.keystore"
+            # Nur Base64-Zeichen behalten (Zeilenumbrueche, Leerzeichen usw. vom Kopieren fallen weg)
+            printf '%s' "$KS_B64" | tr -cd 'A-Za-z0-9+/=' | base64 -d > "$RUNNER_TEMP/fp.keystore"
+            if ! keytool -list -keystore "$RUNNER_TEMP/fp.keystore" -storepass "$KS_PASS" > /dev/null 2>&1; then
+              echo "::error::Schluessel oder FP_KS_PASS passt nicht. Secrets FP_KS_B64 und FP_KS_PASS pruefen."
+              exit 1
+            fi
+            echo "Fester Schluessel geladen"
             echo "FP_KS_PATH=$RUNNER_TEMP/fp.keystore" >> "$GITHUB_ENV"
           else
             echo "Kein fester Schluessel hinterlegt, Debug-Signatur"
