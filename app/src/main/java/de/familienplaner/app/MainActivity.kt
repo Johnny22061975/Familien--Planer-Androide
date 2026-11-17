@@ -106,6 +106,13 @@ class MainActivity : ComponentActivity() {
         fun isNative(): Boolean = true
         @JavascriptInterface
         fun setLocShare(on: Boolean) { runOnUiThread { setLocShareUi(on) } }
+        // Anmeldedaten für das Senden im Hintergrund (Firebase-Konfiguration, Anmelde-Token, Name)
+        @JavascriptInterface
+        fun setLocAuth(json: String) {
+            val p = getSharedPreferences("fp", Context.MODE_PRIVATE).edit()
+            if (json.isEmpty()) p.remove("loc_auth").remove("loc_rt") else p.putString("loc_auth", json).remove("loc_rt")
+            p.apply()
+        }
         // App-Check-Debug-Token (kommt beim Bau aus dem GitHub-Secret FP_AC_DEBUG), nur für die eigene Seite
         @JavascriptInterface
         fun acDebug(): String = BuildConfig.AC_DEBUG
@@ -264,7 +271,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (isFinishing) { LocService.cb = null; try { stopService(Intent(this, LocService::class.java)) } catch (e: Exception) { }; locRunning = false }
+        // Der Standort-Dienst läuft weiter, auch wenn die App geschlossen wird. Er endet nur über den Schalter.
+        LocService.cb = null
         super.onDestroy()
     }
 
