@@ -9,9 +9,11 @@ android {
         applicationId = "de.familienplaner.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "1.0"
+        buildConfigField("String", "AC_DEBUG", "\"" + (System.getenv("FP_AC_DEBUG") ?: "").replace("\"", "") + "\"")
     }
+    buildFeatures { buildConfig = true }
     val ksPath = System.getenv("FP_KS_PATH")
     if (ksPath != null && File(ksPath).exists()) {
         signingConfigs {
