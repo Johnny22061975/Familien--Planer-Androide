@@ -28,6 +28,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : ComponentActivity() {
     private lateinit var web: WebView
@@ -50,6 +51,25 @@ class MainActivity : ComponentActivity() {
         camUri = null
         fileCb?.onReceiveValue(data)
         fileCb = null
+    }
+    // Benachrichtigungen (Android 13+ fragt einmal nach Erlaubnis)
+    private val notifPermL = registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+        getSharedPreferences("fp", Context.MODE_PRIVATE).edit().putBoolean("notif_asked", true).apply(); pushToken() }
+    private fun notifOk(): Boolean = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    private fun notifPerm(): String = if (notifOk()) "granted" else if (getSharedPreferences("fp", Context.MODE_PRIVATE).getBoolean("notif_asked", false)) "denied" else "default"
+    private fun pushJs(tok: String?) {
+        val js = "window.fpNativePush&&window.fpNativePush(" + org.json.JSONObject.quote(tok ?: "") + "," + org.json.JSONObject.quote(notifPerm()) + ")"
+        runOnUiThread { try { web.evaluateJavascript(js, null) } catch (e: Exception) { } }
+    }
+    private fun pushToken() {
+        if (!notifOk() || !FpFire.init(this)) { pushJs(null); return }
+        try {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { t ->
+                val tok = if (t.isSuccessful) t.result else null
+                if (tok != null) getSharedPreferences("fp", Context.MODE_PRIVATE).edit().putString("push_tok", tok).apply()
+                pushJs(tok)
+            }
+        } catch (e: Exception) { pushJs(null) }
     }
     private val camPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
         val p = pendingChooser
@@ -113,6 +133,15 @@ class MainActivity : ComponentActivity() {
             if (json.isEmpty()) p.remove("loc_auth").remove("loc_rt") else p.putString("loc_auth", json).remove("loc_rt")
             p.apply()
         }
+        // Push: Erlaubnis holen (ask) und Gerätekennung an die Web-App melden (window.fpNativePush)
+        @JavascriptInterface
+        fun pushStart(ask: Boolean) { runOnUiThread { if (ask && !notifOk() && Build.VERSION.SDK_INT >= 33) notifPermL.launch(Manifest.permission.POST_NOTIFICATIONS) else pushToken() } }
+        @JavascriptInterface
+        fun notifPerm(): String = this@MainActivity.notifPerm()
+        @JavascriptInterface
+        fun pushOff() { try { if (FpFire.init(this@MainActivity)) FirebaseMessaging.getInstance().deleteToken() } catch (e: Exception) { } }
+        @JavascriptInterface
+        fun ackDiag(): String = getSharedPreferences("fp", Context.MODE_PRIVATE).getString("ack_diag", "") ?: ""
         // App-Check-Debug-Token (kommt beim Bau aus dem GitHub-Secret FP_AC_DEBUG), nur für die eigene Seite
         @JavascriptInterface
         fun acDebug(): String = BuildConfig.AC_DEBUG
