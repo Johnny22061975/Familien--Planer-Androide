@@ -46,22 +46,32 @@ class LocService : Service() {
         if (Build.VERSION.SDK_INT >= 26) {
             nm.createNotificationChannel(NotificationChannel("fp_loc", "Standort teilen", NotificationManager.IMPORTANCE_LOW))
         }
+        val n = note("Dein Standort wird mit der Familie geteilt")
+        try {
+            if (Build.VERSION.SDK_INT >= 29) startForeground(7, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION) else startForeground(7, n)
+        } catch (e: Exception) { stopSelf(); return START_NOT_STICKY }
+        if (i?.action != ACT_SHOW || lm == null) startUpdates()
+        return START_STICKY
+    }
+
+    // Benachrichtigung; der Text zeigt, wann zuletzt gesendet wurde (oder warum es nicht klappt)
+    private fun note(text: String): Notification {
         val pi = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "fp_loc") else Notification.Builder(this)
-        val n = b.setContentTitle("Familien-Planer")
-            .setContentText("Dein Standort wird mit der Familie geteilt")
+        return b.setContentTitle("Familien-Planer · Standort geteilt")
+            .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pi)
             .setOngoing(true)
             // Weggewischt: Benachrichtigung kommt sofort wieder, das Teilen läuft weiter
             .setDeleteIntent(PendingIntent.getService(this, 2, Intent(this, LocService::class.java).setAction(ACT_SHOW), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
             .addAction(Notification.Action.Builder(null, "Ausschalten", PendingIntent.getService(this, 1, Intent(this, LocService::class.java).setAction(ACT_STOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build())
+            .setOnlyAlertOnce(true)
             .build()
-        try {
-            if (Build.VERSION.SDK_INT >= 29) startForeground(7, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION) else startForeground(7, n)
-        } catch (e: Exception) { stopSelf(); return START_NOT_STICKY }
-        if (i?.action != ACT_SHOW || lm == null) startUpdates()
-        return START_STICKY
+    }
+
+    private fun status(text: String) {
+        try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(7, note(text)) } catch (e: Exception) {}
     }
 
     @Suppress("MissingPermission")
@@ -94,7 +104,13 @@ class LocService : Service() {
         }
         lastSent = now; lastLat = l.latitude; lastLon = l.longitude
         val lat = l.latitude; val lon = l.longitude; val acc = Math.round(l.accuracy)
-        Thread { try { send(lat, lon, acc, now) } catch (e: Exception) { lastSent = 0L } }.start()
+        Thread {
+            try {
+                val ok = send(lat, lon, acc, now)
+                val t = java.text.SimpleDateFormat("HH:mm", java.util.Locale.GERMANY).format(java.util.Date())
+                status(if (ok) "Zuletzt gesendet um $t" else "Nicht gesendet: App einmal öffnen")
+            } catch (e: Exception) { lastSent = 0L; status("Senden klappt nicht: " + (e.message ?: "Fehler").take(60)) }
+        }.start()
     }
 
     private fun http(url: String, body: String, type: String, headers: Map<String, String> = emptyMap()): String {
@@ -110,8 +126,8 @@ class LocService : Service() {
         return txt
     }
 
-    private fun send(lat: Double, lon: Double, acc: Int, ts: Long) {
-        write(JSONObject()
+    private fun send(lat: Double, lon: Double, acc: Int, ts: Long): Boolean {
+        return write(JSONObject()
             .put("on", JSONObject().put("booleanValue", true))
             .put("lat", JSONObject().put("doubleValue", Math.round(lat * 100000.0) / 100000.0))
             .put("lon", JSONObject().put("doubleValue", Math.round(lon * 100000.0) / 100000.0))
@@ -120,12 +136,12 @@ class LocService : Service() {
             .put("src", JSONObject().put("stringValue", "app")))
     }
 
-    private fun write(f: JSONObject) {
+    private fun write(f: JSONObject): Boolean {
         val p = getSharedPreferences("fp", MODE_PRIVATE)
-        val a = JSONObject(p.getString("loc_auth", null) ?: return)
+        val a = JSONObject(p.getString("loc_auth", null) ?: return false)
         val key = a.optString("apiKey"); val proj = a.optString("projectId"); val me = a.optString("me")
         var rt = p.getString("loc_rt", null) ?: a.optString("refreshToken")
-        if (key.isEmpty() || proj.isEmpty() || me.isEmpty() || rt.isEmpty()) return
+        if (key.isEmpty() || proj.isEmpty() || me.isEmpty() || rt.isEmpty()) return false
         val now = System.currentTimeMillis()
         if (idTok.isEmpty() || now > idExp) {
             val r = JSONObject(http("https://securetoken.googleapis.com/v1/token?key=" + key,
@@ -152,6 +168,7 @@ class LocService : Service() {
         try {
             http("https://firestore.googleapis.com/v1/projects/" + proj + "/databases/(default)/documents:commit", body.toString(), "application/json", h)
         } catch (e: Exception) { idTok = ""; throw e }
+        return true
     }
 
     override fun onDestroy() {
