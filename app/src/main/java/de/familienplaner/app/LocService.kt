@@ -33,6 +33,15 @@ class LocService : Service() {
     override fun onBind(i: Intent?): IBinder? = null
 
     override fun onStartCommand(i: Intent?, f: Int, id: Int): Int {
+        // Knopf "Ausschalten" in der Benachrichtigung: Teilen beenden und der Familie "aus" melden
+        if (i?.action == ACT_STOP) {
+            try { lm?.removeUpdates(listener) } catch (e: Exception) {}
+            Thread { try { write(JSONObject().put("on", JSONObject().put("booleanValue", false)).put("ts", JSONObject().put("integerValue", System.currentTimeMillis().toString()))) } catch (e: Exception) {} }.start()
+            cb = null
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) {
             nm.createNotificationChannel(NotificationChannel("fp_loc", "Standort teilen", NotificationManager.IMPORTANCE_LOW))
@@ -44,11 +53,14 @@ class LocService : Service() {
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pi)
             .setOngoing(true)
+            // Weggewischt: Benachrichtigung kommt sofort wieder, das Teilen läuft weiter
+            .setDeleteIntent(PendingIntent.getService(this, 2, Intent(this, LocService::class.java).setAction(ACT_SHOW), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+            .addAction(Notification.Action.Builder(null, "Ausschalten", PendingIntent.getService(this, 1, Intent(this, LocService::class.java).setAction(ACT_STOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build())
             .build()
         try {
             if (Build.VERSION.SDK_INT >= 29) startForeground(7, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION) else startForeground(7, n)
         } catch (e: Exception) { stopSelf(); return START_NOT_STICKY }
-        startUpdates()
+        if (i?.action != ACT_SHOW || lm == null) startUpdates()
         return START_STICKY
     }
 
@@ -99,6 +111,16 @@ class LocService : Service() {
     }
 
     private fun send(lat: Double, lon: Double, acc: Int, ts: Long) {
+        write(JSONObject()
+            .put("on", JSONObject().put("booleanValue", true))
+            .put("lat", JSONObject().put("doubleValue", Math.round(lat * 100000.0) / 100000.0))
+            .put("lon", JSONObject().put("doubleValue", Math.round(lon * 100000.0) / 100000.0))
+            .put("acc", JSONObject().put("integerValue", acc.toString()))
+            .put("ts", JSONObject().put("integerValue", ts.toString()))
+            .put("src", JSONObject().put("stringValue", "app")))
+    }
+
+    private fun write(f: JSONObject) {
         val p = getSharedPreferences("fp", MODE_PRIVATE)
         val a = JSONObject(p.getString("loc_auth", null) ?: return)
         val key = a.optString("apiKey"); val proj = a.optString("projectId"); val me = a.optString("me")
@@ -126,13 +148,6 @@ class LocService : Service() {
             } catch (e: Exception) { }
         }
         val name = "projects/" + proj + "/databases/(default)/documents/settings/loc_" + me
-        val f = JSONObject()
-            .put("on", JSONObject().put("booleanValue", true))
-            .put("lat", JSONObject().put("doubleValue", Math.round(lat * 100000.0) / 100000.0))
-            .put("lon", JSONObject().put("doubleValue", Math.round(lon * 100000.0) / 100000.0))
-            .put("acc", JSONObject().put("integerValue", acc.toString()))
-            .put("ts", JSONObject().put("integerValue", ts.toString()))
-            .put("src", JSONObject().put("stringValue", "app"))
         val body = JSONObject().put("writes", JSONArray().put(JSONObject().put("update", JSONObject().put("name", name).put("fields", f))))
         try {
             http("https://firestore.googleapis.com/v1/projects/" + proj + "/databases/(default)/documents:commit", body.toString(), "application/json", h)
@@ -147,5 +162,7 @@ class LocService : Service() {
     companion object {
         @Volatile var cb: ((Location) -> Unit)? = null
         const val ORIGIN = "https://johnny22061975.github.io/"
+        const val ACT_STOP = "de.familienplaner.app.LOC_STOP"
+        const val ACT_SHOW = "de.familienplaner.app.LOC_SHOW"
     }
 }
