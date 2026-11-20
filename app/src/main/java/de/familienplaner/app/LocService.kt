@@ -80,8 +80,8 @@ class LocService : Service() {
         lm = m
         try { m.removeUpdates(listener) } catch (e: Exception) {}
         try {
-            if (m.isProviderEnabled(LocationManager.GPS_PROVIDER)) m.requestLocationUpdates(LocationManager.GPS_PROVIDER, 60000L, 30f, listener, Looper.getMainLooper())
-            if (m.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) m.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 120000L, 0f, listener, Looper.getMainLooper())
+            if (m.isProviderEnabled(LocationManager.GPS_PROVIDER)) m.requestLocationUpdates(LocationManager.GPS_PROVIDER, 15000L, 0f, listener, Looper.getMainLooper())
+            if (m.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) m.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 15000L, 0f, listener, Looper.getMainLooper())
         } catch (e: Exception) { }
     }
 
@@ -96,11 +96,11 @@ class LocService : Service() {
 
     private fun upload(l: Location) {
         val now = System.currentTimeMillis()
-        if (now - lastSent < 60000L) return
+        if (now - lastSent < 15000L) return // höchstens alle 15 Sekunden
         if (lastSent > 0) {
             val d = FloatArray(1)
             Location.distanceBetween(lastLat, lastLon, l.latitude, l.longitude, d)
-            if (d[0] < 30f && now - lastSent < 600000L) return
+            if (d[0] < 15f && now - lastSent < 120000L) return // steht still: nur alle 2 Minuten senden
         }
         lastSent = now; lastLat = l.latitude; lastLon = l.longitude
         val lat = l.latitude; val lon = l.longitude; val acc = Math.round(l.accuracy)
