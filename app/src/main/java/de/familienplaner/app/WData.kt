@@ -15,10 +15,10 @@ class Cell(
 object WData {
     private const val PREF = "fp"
 
-    fun offset(ctx: Context): Int = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getInt("off", 0).coerceIn(0, 6)
+    fun offset(ctx: Context): Int = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getInt("off", 0).coerceIn(0, 12)
 
     fun setOffset(ctx: Context, v: Int) {
-        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putInt("off", v.coerceIn(0, 6)).apply()
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putInt("off", v.coerceIn(0, 12)).apply()
     }
 
     private fun color(s: String, fallback: Int): Int = try { android.graphics.Color.parseColor(s) } catch (e: Exception) { fallback }
@@ -29,7 +29,7 @@ object WData {
         try {
             val o = JSONObject(raw)
             val months = o.getJSONArray("months")
-            // Monat passend zu heute + Blättern suchen (die App schickt den aktuellen und 6 kommende Monate)
+            // Monat passend zu heute + Blättern suchen (die App schickt den aktuellen und 12 kommende Monate)
             val cc = java.util.Calendar.getInstance(); cc.set(java.util.Calendar.DAY_OF_MONTH, 1); cc.add(java.util.Calendar.MONTH, offset(ctx))
             val want = String.format("%04d-%02d", cc.get(java.util.Calendar.YEAR), cc.get(java.util.Calendar.MONTH) + 1)
             var m: JSONObject? = null
