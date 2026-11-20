@@ -166,6 +166,11 @@ class MainActivity : ComponentActivity() {
                 } catch (e: Exception) { send(org.json.JSONObject().put("ok", false).put("err", (e.message ?: "Fehler").take(100))) }
             }.start()
         }
+        // Update-Knopf in der Web-App: neue App-Version suchen (Ergebnis an window.fpUpdMsg)
+        @JavascriptInterface
+        fun appUpdate() { runOnUiThread { Updater.check(this@MainActivity, true) { m -> try { web.evaluateJavascript("window.fpUpdMsg&&window.fpUpdMsg(" + org.json.JSONObject.quote(m) + ")", null) } catch (e: Exception) { } } } }
+        @JavascriptInterface
+        fun appVersion(): Int = BuildConfig.VERSION_CODE
         // App-Check-Debug-Token (kommt beim Bau aus dem GitHub-Secret FP_AC_DEBUG), nur für die eigene Seite
         @JavascriptInterface
         fun acDebug(): String = BuildConfig.AC_DEBUG
@@ -191,6 +196,7 @@ class MainActivity : ComponentActivity() {
         web = WebView(this)
         setContentView(web)
         setup(web)
+        Updater.check(this, false)
         web.addJavascriptInterface(Bridge(), "FPNative")
         web.webViewClient = object : WebViewClient() {
             override fun onPageFinished(v: WebView, url: String?) {
