@@ -37,4 +37,5 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation(platform("com.google.firebase:firebase-bom:32.8.1"))
     implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }
