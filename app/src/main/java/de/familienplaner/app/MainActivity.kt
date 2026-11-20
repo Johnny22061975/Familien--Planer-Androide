@@ -143,6 +143,15 @@ class MainActivity : ComponentActivity() {
         fun notifPerm(): String = this@MainActivity.notifPerm()
         @JavascriptInterface
         fun pushOff() { try { if (FpFire.init(this@MainActivity)) FirebaseMessaging.getInstance().deleteToken() } catch (e: Exception) { } }
+        // Prüfung Push: erlaubt?, Kennung vorhanden?, zuletzt empfangen?
+        @JavascriptInterface
+        fun pushDiag(): String {
+            val p = getSharedPreferences("fp", Context.MODE_PRIVATE)
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val ch = if (Build.VERSION.SDK_INT >= 26) nm.notificationChannels.filter { it.id.startsWith("fp_") && it.id != "fp_loc" }.map { it.id + ":" + it.importance } else emptyList()
+            return org.json.JSONObject().put("allowed", nm.areNotificationsEnabled()).put("tok", (p.getString("push_tok", "") ?: "").take(8))
+                .put("rx", p.getString("rx_last", "") ?: "").put("ch", org.json.JSONArray(ch)).put("ver", BuildConfig.VERSION_CODE).toString()
+        }
         @JavascriptInterface
         fun ackDiag(): String = getSharedPreferences("fp", Context.MODE_PRIVATE).getString("ack_diag", "") ?: ""
         // Kassenbon direkt auf dem Handy lesen (ML Kit, offline). Ergebnis an window.fpNativeOcr(id, {ok, lines:[{t,x,y,h}]})

@@ -49,6 +49,8 @@ class FpMsgService : FirebaseMessagingService() {
         val body = d["body"] ?: m.notification?.body ?: ""
         val kind = d["kind"] ?: ""
         val tag = d["tag"] ?: ("fp_" + System.currentTimeMillis())
+        // Für die Prüfung in der App: wann zuletzt etwas angekommen ist
+        try { getSharedPreferences("fp", Context.MODE_PRIVATE).edit().putString("rx_last", JSONObject().put("t", System.currentTimeMillis()).put("kind", kind).put("title", title.take(60)).toString()).apply() } catch (e: Exception) { }
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val ch = if (kind == "chat") "fp_chat" else "fp_rem"
         if (Build.VERSION.SDK_INT >= 26) {
