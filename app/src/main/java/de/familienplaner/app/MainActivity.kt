@@ -29,6 +29,9 @@ import androidx.activity.ComponentActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
 class MainActivity : ComponentActivity() {
     private lateinit var web: WebView
@@ -142,6 +145,27 @@ class MainActivity : ComponentActivity() {
         fun pushOff() { try { if (FpFire.init(this@MainActivity)) FirebaseMessaging.getInstance().deleteToken() } catch (e: Exception) { } }
         @JavascriptInterface
         fun ackDiag(): String = getSharedPreferences("fp", Context.MODE_PRIVATE).getString("ack_diag", "") ?: ""
+        // Kassenbon direkt auf dem Handy lesen (ML Kit, offline). Ergebnis an window.fpNativeOcr(id, {ok, lines:[{t,x,y,h}]})
+        @JavascriptInterface
+        fun ocr(id: String, b64: String) {
+            val send = { j: org.json.JSONObject -> runOnUiThread { try { web.evaluateJavascript("window.fpNativeOcr&&window.fpNativeOcr(" + org.json.JSONObject.quote(id) + "," + j.toString() + ")", null) } catch (e: Exception) { } } }
+            Thread {
+                try {
+                    val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                    val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: throw Exception("Bild")
+                    TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(InputImage.fromBitmap(bmp, 0))
+                        .addOnSuccessListener { t ->
+                            val arr = org.json.JSONArray()
+                            for (b in t.textBlocks) for (l in b.lines) {
+                                val r = l.boundingBox
+                                arr.put(org.json.JSONObject().put("t", l.text).put("x", r?.left ?: 0).put("y", r?.top ?: 0).put("h", r?.height() ?: 0))
+                            }
+                            send(org.json.JSONObject().put("ok", true).put("lines", arr))
+                        }
+                        .addOnFailureListener { e -> send(org.json.JSONObject().put("ok", false).put("err", (e.message ?: "Fehler").take(100))) }
+                } catch (e: Exception) { send(org.json.JSONObject().put("ok", false).put("err", (e.message ?: "Fehler").take(100))) }
+            }.start()
+        }
         // App-Check-Debug-Token (kommt beim Bau aus dem GitHub-Secret FP_AC_DEBUG), nur für die eigene Seite
         @JavascriptInterface
         fun acDebug(): String = BuildConfig.AC_DEBUG
