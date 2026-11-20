@@ -1,0 +1,62 @@
+name: APK bauen
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Android-Lizenzen bestaetigen
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+      - name: Fester Schluessel
+        env:
+          KS_B64: ${{ secrets.FP_KS_B64 }}
+          KS_PASS: ${{ secrets.FP_KS_PASS }}
+          KS_ALIAS: ${{ secrets.FP_KS_ALIAS }}
+          KEY_PASS: ${{ secrets.FP_KEY_PASS }}
+        run: |
+          trim() { printf '%s' "$1" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+          if [ -z "$KS_B64" ]; then echo "Kein fester Schluessel hinterlegt, Debug-Signatur"; exit 0; fi
+          F="$RUNNER_TEMP/fp.keystore"
+          printf '%s' "$KS_B64" | tr -cd 'A-Za-z0-9+/=' | base64 -d > "$F" 2>/dev/null || true
+          P="$(trim "$KS_PASS")"; A="$(trim "$KS_ALIAS")"; K="$(trim "$KEY_PASS")"
+          echo "::add-mask::$P"; echo "::add-mask::$K"
+          echo "Pruefung: Schluesseldatei $(stat -c %s "$F") Bytes, Kennung $(sha256sum "$F" | cut -c1-8) (erwartet: 2724 Bytes, Kennung 07ffa478)"
+          echo "Pruefung: Laenge FP_KS_PASS ${#P}, FP_KEY_PASS ${#K}, Alias '$A'"
+          if ! keytool -list -keystore "$F" -storepass "$P" > /dev/null 2>&1; then
+            if [ "$(sha256sum "$F" | cut -c1-8)" != "07ffa478" ]; then
+              echo "::error::FP_KS_B64 ist falsch (Datei kaputt). FP_KS_B64 neu eintragen."
+            else
+              echo "::error::Schluesseldatei ist richtig, aber FP_KS_PASS passt nicht."
+            fi
+            exit 1
+          fi
+          echo "Fester Schluessel geladen"
+          { echo "FP_KS_PATH=$F"; echo "FP_KS_PASS=$P"; echo "FP_KS_ALIAS=$A"; echo "FP_KEY_PASS=$K"; } >> "$GITHUB_ENV"
+      - run: gradle assembleDebug --no-daemon
+        env:
+          FP_AC_DEBUG: ${{ secrets.FP_AC_DEBUG }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Familien-Planer-APK
+          path: app/build/outputs/apk/debug/*.apk
+      - name: Fuer den Update-Knopf veroeffentlichen
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          N=${{ github.run_number }}
+          cp app/build/outputs/apk/debug/app-debug.apk familien-planer.apk
+          gh release create "v$N" familien-planer.apk --title "Version $N" --notes "Automatisch gebaut" --latest
+          # nur die neuesten 3 Versionen behalten
+          gh release list --limit 50 --json tagName --jq '.[3:][].tagName' | while read -r t; do gh release delete "$t" --yes --cleanup-tag || true; done
