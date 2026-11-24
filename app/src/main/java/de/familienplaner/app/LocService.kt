@@ -20,6 +20,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
+class StopEx : Exception()
+
 class LocService : Service() {
     private var lm: LocationManager? = null
     private val listener = object : LocationListener {
@@ -42,6 +44,8 @@ class LocService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        // Von einem Administrator ausgeschaltet: beenden, ohne etwas zu schreiben
+        if (i?.action == ACT_HALT) { halt(); return START_NOT_STICKY }
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) {
             nm.createNotificationChannel(NotificationChannel("fp_loc", "Standort teilen", NotificationManager.IMPORTANCE_LOW))
@@ -49,7 +53,13 @@ class LocService : Service() {
         val n = note("Dein Standort wird mit der Familie geteilt")
         try {
             if (Build.VERSION.SDK_INT >= 29) startForeground(7, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION) else startForeground(7, n)
-        } catch (e: Exception) { stopSelf(); return START_NOT_STICKY }
+        } catch (e: Exception) {
+            // Android lässt den Start aus dem Hintergrund nicht zu: Hinweis zum Antippen
+            if (i?.action == ACT_REMOTE) tapHint()
+            stopSelf(); return START_NOT_STICKY
+        }
+        running = true
+        if (lastChk == 0L) lastChk = System.currentTimeMillis() // erste Prüfung nach einer Minute
         if (i?.action != ACT_SHOW || lm == null) startUpdates()
         return START_STICKY
     }
@@ -68,6 +78,23 @@ class LocService : Service() {
             .addAction(Notification.Action.Builder(null, "Ausschalten", PendingIntent.getService(this, 1, Intent(this, LocService::class.java).setAction(ACT_STOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)).build())
             .setOnlyAlertOnce(true)
             .build()
+    }
+
+    private fun tapHint() {
+        try {
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel("fp_rem", "Erinnerungen", NotificationManager.IMPORTANCE_HIGH))
+            val pi = PendingIntent.getActivity(this, 4, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "fp_rem") else Notification.Builder(this)
+            nm.notify(8, b.setContentTitle("📍 Standort teilen").setContentText("Tippe hier, damit das Teilen startet.").setSmallIcon(android.R.drawable.ic_menu_mylocation).setContentIntent(pi).setAutoCancel(true).build())
+        } catch (e: Exception) { }
+    }
+
+    private fun halt() {
+        try { lm?.removeUpdates(listener) } catch (e: Exception) {}
+        cb = null; running = false
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun status(text: String) {
@@ -93,6 +120,7 @@ class LocService : Service() {
     private var idExp = 0L
     private var acTok = ""
     private var acExp = 0L
+    private var lastChk = 0L
 
     private fun upload(l: Location) {
         val now = System.currentTimeMillis()
@@ -106,10 +134,13 @@ class LocService : Service() {
         val lat = l.latitude; val lon = l.longitude; val acc = Math.round(l.accuracy)
         Thread {
             try {
+                var off = false
+                if (now - lastChk > 60000L) { lastChk = now; off = stillOn() == false }
+                if (off) { android.os.Handler(Looper.getMainLooper()).post { halt() }; throw StopEx() }
                 val ok = send(lat, lon, acc, now)
                 val t = java.text.SimpleDateFormat("HH:mm", java.util.Locale.GERMANY).format(java.util.Date())
                 status(if (ok) "Zuletzt gesendet um $t" else "Nicht gesendet: App einmal öffnen")
-            } catch (e: Exception) { lastSent = 0L; status("Senden klappt nicht: " + (e.message ?: "Fehler").take(60)) }
+            } catch (e: StopEx) { } catch (e: Exception) { lastSent = 0L; status("Senden klappt nicht: " + (e.message ?: "Fehler").take(60)) }
         }.start()
     }
 
@@ -128,20 +159,41 @@ class LocService : Service() {
 
     private fun send(lat: Double, lon: Double, acc: Int, ts: Long): Boolean {
         return write(JSONObject()
-            .put("on", JSONObject().put("booleanValue", true))
             .put("lat", JSONObject().put("doubleValue", Math.round(lat * 100000.0) / 100000.0))
             .put("lon", JSONObject().put("doubleValue", Math.round(lon * 100000.0) / 100000.0))
             .put("acc", JSONObject().put("integerValue", acc.toString()))
             .put("ts", JSONObject().put("integerValue", ts.toString()))
-            .put("src", JSONObject().put("stringValue", "app")))
+            .put("src", JSONObject().put("stringValue", "app")), listOf("lat", "lon", "acc", "ts", "src"))
     }
 
-    private fun write(f: JSONObject): Boolean {
+    private fun get(url: String, headers: Map<String, String>): String {
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.connectTimeout = 20000; c.readTimeout = 20000
+        c.setRequestProperty("Referer", ORIGIN)
+        for ((k, v) in headers) c.setRequestProperty(k, v)
+        val code = c.responseCode
+        val txt = (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+        if (code >= 400) throw Exception("HTTP " + code + ": " + txt.take(200))
+        return txt
+    }
+
+    // Ist das Teilen noch eingeschaltet? (null = unbekannt, dann weitermachen)
+    private fun stillOn(): Boolean? {
+        return try {
+            val a = auth() ?: return null
+            val j = JSONObject(get("https://firestore.googleapis.com/v1/projects/" + a.first + "/databases/(default)/documents/settings/loc_" + a.second, a.third))
+            val on = j.optJSONObject("fields")?.optJSONObject("on") ?: return null
+            on.optBoolean("booleanValue", true)
+        } catch (e: Exception) { if ((e.message ?: "").startsWith("HTTP 404")) false else null }
+    }
+
+    // Anmeldung: Projekt, Name, Kopfzeilen (Token und App-Check)
+    private fun auth(): Triple<String, String, Map<String, String>>? {
         val p = getSharedPreferences("fp", MODE_PRIVATE)
-        val a = JSONObject(p.getString("loc_auth", null) ?: return false)
+        val a = JSONObject(p.getString("loc_auth", null) ?: return null)
         val key = a.optString("apiKey"); val proj = a.optString("projectId"); val me = a.optString("me")
         var rt = p.getString("loc_rt", null) ?: a.optString("refreshToken")
-        if (key.isEmpty() || proj.isEmpty() || me.isEmpty() || rt.isEmpty()) return false
+        if (key.isEmpty() || proj.isEmpty() || me.isEmpty() || rt.isEmpty()) return null
         val now = System.currentTimeMillis()
         if (idTok.isEmpty() || now > idExp) {
             val r = JSONObject(http("https://securetoken.googleapis.com/v1/token?key=" + key,
@@ -163,8 +215,16 @@ class LocService : Service() {
                 h["X-Firebase-AppCheck"] = acTok
             } catch (e: Exception) { }
         }
+        return Triple(proj, me, h)
+    }
+
+    private fun write(f: JSONObject, mask: List<String>? = null): Boolean {
+        val a = auth() ?: return false
+        val proj = a.first; val me = a.second; val h = a.third
         val name = "projects/" + proj + "/databases/(default)/documents/settings/loc_" + me
-        val body = JSONObject().put("writes", JSONArray().put(JSONObject().put("update", JSONObject().put("name", name).put("fields", f))))
+        val w = JSONObject().put("update", JSONObject().put("name", name).put("fields", f))
+        if (mask != null) w.put("updateMask", JSONObject().put("fieldPaths", JSONArray(mask)))
+        val body = JSONObject().put("writes", JSONArray().put(w))
         try {
             http("https://firestore.googleapis.com/v1/projects/" + proj + "/databases/(default)/documents:commit", body.toString(), "application/json", h)
         } catch (e: Exception) { idTok = ""; throw e }
@@ -172,12 +232,16 @@ class LocService : Service() {
     }
 
     override fun onDestroy() {
+        running = false
         try { lm?.removeUpdates(listener) } catch (e: Exception) {}
         super.onDestroy()
     }
 
     companion object {
         @Volatile var cb: ((Location) -> Unit)? = null
+        @Volatile var running = false
+        const val ACT_REMOTE = "de.familienplaner.app.LOC_REMOTE"
+        const val ACT_HALT = "de.familienplaner.app.LOC_HALT"
         const val ORIGIN = "https://johnny22061975.github.io/"
         const val ACT_STOP = "de.familienplaner.app.LOC_STOP"
         const val ACT_SHOW = "de.familienplaner.app.LOC_SHOW"

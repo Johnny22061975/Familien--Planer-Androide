@@ -183,6 +183,74 @@ class MainActivity : ComponentActivity() {
         // App-Check-Debug-Token (kommt beim Bau aus dem GitHub-Secret FP_AC_DEBUG), nur für die eigene Seite
         @JavascriptInterface
         fun acDebug(): String = BuildConfig.AC_DEBUG
+
+        // ---- Wecker ----
+        @JavascriptInterface
+        fun setAlarms(json: String) { FpAlarm.setPlan(applicationContext, json) }
+        @JavascriptInterface
+        fun alarmCfg(): String {
+            val c = applicationContext
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val perm = org.json.JSONObject().put("exact", FpAlarm.canExact(c)).put("notif", nm.areNotificationsEnabled())
+                .put("fsi", if (Build.VERSION.SDK_INT >= 34) nm.canUseFullScreenIntent() else true)
+            val j = FpAlarm.cfg(c)
+            return org.json.JSONObject().put("snooze", FpAlarm.snoozeMin(c)).put("cats", j.optJSONObject("cats") ?: org.json.JSONObject())
+                .put("perm", perm).put("next", FpAlarm.next(c) ?: org.json.JSONObject()).toString()
+        }
+        @JavascriptInterface
+        fun setAlarmCfg(json: String) {
+            try {
+                val o = org.json.JSONObject(json)
+                if (o.has("snooze")) FpAlarm.setSnooze(applicationContext, o.optInt("snooze", 5))
+                val cat = o.optString("cat")
+                if (cat.isNotEmpty() && FpAlarm.NAMES.containsKey(cat) && o.has("brief")) FpAlarm.setCat(applicationContext, cat) { it.put("brief", o.optBoolean("brief")) }
+            } catch (e: Exception) { }
+        }
+        @JavascriptInterface
+        fun alarmTest(cat: String) {
+            val c = if (FpAlarm.NAMES.containsKey(cat)) cat else "ev"
+            runOnUiThread {
+                FpAlarm.ring(this@MainActivity, "test_" + System.currentTimeMillis(), "⏰ Probe-Wecker", FpAlarm.NAMES[c] ?: "", c, false)
+                web.postDelayed({ try { startActivity(Intent(this@MainActivity, AlarmActivity::class.java)) } catch (e: Exception) { } }, 600)
+            }
+        }
+        @JavascriptInterface
+        fun pickTone(cat: String) { if (FpAlarm.NAMES.containsKey(cat)) runOnUiThread { pickToneUi(cat) } }
+        @JavascriptInterface
+        fun alarmPerm(which: String) { runOnUiThread { alarmPermUi(which) } }
+    }
+
+    // Weckton aussuchen (Android-Auswahl mit Weck- und Klingeltönen)
+    private var toneCat = ""
+    private val tonePick = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val cat = toneCat; toneCat = ""
+        if (r.resultCode != Activity.RESULT_OK || cat.isEmpty()) return@registerForActivityResult
+        @Suppress("DEPRECATION")
+        val u: Uri? = r.data?.getParcelableExtra(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+        val title = try { if (u != null) android.media.RingtoneManager.getRingtone(this, u)?.getTitle(this) ?: "" else "" } catch (e: Exception) { "" }
+        FpAlarm.setCat(applicationContext, cat) { o -> if (u == null) { o.remove("tone"); o.remove("title") } else { o.put("tone", u.toString()); o.put("title", title.take(40)) } }
+        try { web.evaluateJavascript("window.fpAlarmCfg&&window.fpAlarmCfg()", null) } catch (e: Exception) { }
+    }
+    private fun pickToneUi(cat: String) {
+        toneCat = cat
+        val cur = FpAlarm.cat(applicationContext, cat).optString("tone")
+        val i = Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER)
+            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, android.media.RingtoneManager.TYPE_ALARM or android.media.RingtoneManager.TYPE_RINGTONE)
+            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TITLE, "Weckton: " + (FpAlarm.NAMES[cat] ?: ""))
+            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, if (cur.isNotEmpty()) Uri.parse(cur) else android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI)
+        try { tonePick.launch(i) } catch (e: Exception) { toneCat = "" }
+    }
+    private fun alarmPermUi(which: String) {
+        val pkg = Uri.parse("package:" + packageName)
+        val i = when {
+            which == "exact" && Build.VERSION.SDK_INT >= 31 -> Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, pkg)
+            which == "fsi" && Build.VERSION.SDK_INT >= 34 -> Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, pkg)
+            Build.VERSION.SDK_INT >= 26 -> Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+            else -> Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)
+        }
+        try { startActivity(i) } catch (e: Exception) { try { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)) } catch (x: Exception) { } }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -300,9 +368,8 @@ class MainActivity : ComponentActivity() {
         return true
     }
 
-    private var locRunning = false
     private fun setLocShareUi(on: Boolean) {
-        if (on == locRunning) return
+        if (on == LocService.running && (!on || LocService.cb != null)) return
         val i = Intent(this, LocService::class.java)
         if (on) {
             val ok = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -311,11 +378,11 @@ class MainActivity : ComponentActivity() {
                 val js = "window.fpNativeLoc&&window.fpNativeLoc(" + l.latitude + "," + l.longitude + "," + Math.round(l.accuracy) + ")"
                 runOnUiThread { try { web.evaluateJavascript(js, null) } catch (e: Exception) { } }
             }
-            try { ContextCompat.startForegroundService(this, i); locRunning = true } catch (e: Exception) { }
+            try { ContextCompat.startForegroundService(this, i) } catch (e: Exception) { }
         } else {
             LocService.cb = null
             stopService(i)
-            locRunning = false
+            LocService.running = false
         }
     }
 
@@ -342,6 +409,12 @@ class MainActivity : ComponentActivity() {
         // Der Standort-Dienst läuft weiter, auch wenn die App geschlossen wird. Er endet nur über den Schalter.
         LocService.cb = null
         super.onDestroy()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // zurück aus den Android-Einstellungen: Wecker-Anzeige auffrischen
+        try { if (pageReady) web.evaluateJavascript("window.fpAlarmCfg&&window.fpAlarmCfg()", null) } catch (e: Exception) { }
     }
 
     override fun onSaveInstanceState(o: Bundle) { super.onSaveInstanceState(o); web.saveState(o) }

@@ -51,6 +51,19 @@ class FpMsgService : FirebaseMessagingService() {
         val tag = d["tag"] ?: ("fp_" + System.currentTimeMillis())
         // Für die Prüfung in der App: wann zuletzt etwas angekommen ist
         try { getSharedPreferences("fp", Context.MODE_PRIVATE).edit().putString("rx_last", JSONObject().put("t", System.currentTimeMillis()).put("kind", kind).put("title", title.take(60)).toString()).apply() } catch (e: Exception) { }
+        // Wecker: klingelt hier auf dem Handy. Kennt das Handy ihn schon (selbst gestellt), ist die Meldung vom Server überflüssig.
+        if (kind == "alarm") {
+            if (FpAlarm.known(this, tag)) return
+            FpAlarm.ring(this, tag, title, body, FpAlarm.catOf(tag), false)
+            return
+        }
+        // Ein Administrator hat das Teilen des Standorts ein- oder ausgeschaltet
+        if (kind == "locon" && !LocService.running) {
+            try { androidx.core.content.ContextCompat.startForegroundService(this, Intent(this, LocService::class.java).setAction(LocService.ACT_REMOTE)) } catch (e: Exception) { }
+        }
+        if (kind == "locoff" && LocService.running) {
+            try { startService(Intent(this, LocService::class.java).setAction(LocService.ACT_HALT)) } catch (e: Exception) { }
+        }
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val ch = if (kind == "chat") "fp_chat" else "fp_rem"
         if (Build.VERSION.SDK_INT >= 26) {
