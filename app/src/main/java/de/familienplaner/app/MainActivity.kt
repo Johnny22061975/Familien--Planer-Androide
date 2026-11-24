@@ -218,6 +218,23 @@ class MainActivity : ComponentActivity() {
         fun pickTone(cat: String) { if (FpAlarm.NAMES.containsKey(cat)) runOnUiThread { pickToneUi(cat) } }
         @JavascriptInterface
         fun alarmPerm(which: String) { runOnUiThread { alarmPermUi(which) } }
+        // Standort "Immer erlauben": nötig, damit ein Administrator das Teilen bei geschlossener App starten kann
+        @JavascriptInterface
+        fun bgLoc(): String {
+            val fine = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (!fine) return "none"
+            if (Build.VERSION.SDK_INT < 29) return "ok"
+            return if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED) "ok" else "no"
+        }
+        @JavascriptInterface
+        fun askBgLoc() { runOnUiThread {
+            val fine = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (!fine) { perms.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)); return@runOnUiThread }
+            if (Build.VERSION.SDK_INT >= 29) {
+                try { ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION), 7) }
+                catch (e: Exception) { try { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + packageName))) } catch (x: Exception) { } }
+            }
+        } }
     }
 
     // Weckton aussuchen (Android-Auswahl mit Weck- und Klingeltönen)
