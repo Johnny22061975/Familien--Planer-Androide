@@ -17,25 +17,43 @@
     <LinearLayout android:id="@+id/rw0" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="1dp" android:visibility="gone">
         <TextView android:id="@+id/rb0" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/badge_bg" android:paddingLeft="4dp" android:paddingRight="4dp" android:textColor="#FFFFFF" android:textSize="10sp" android:textStyle="bold" android:maxLines="1" android:visibility="gone" />
         <TextView android:id="@+id/re0" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="1dp" android:textSize="10sp" android:maxLines="1" />
+        <ImageView android:id="@+id/ri0_0" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri0_1" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri0_2" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
     </LinearLayout>
     <LinearLayout android:id="@+id/rw1" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="1dp" android:visibility="gone">
         <TextView android:id="@+id/rb1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/badge_bg" android:paddingLeft="4dp" android:paddingRight="4dp" android:textColor="#FFFFFF" android:textSize="10sp" android:textStyle="bold" android:maxLines="1" android:visibility="gone" />
         <TextView android:id="@+id/re1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="1dp" android:textSize="10sp" android:maxLines="1" />
+        <ImageView android:id="@+id/ri1_0" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri1_1" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri1_2" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
     </LinearLayout>
     <LinearLayout android:id="@+id/rw2" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="1dp" android:visibility="gone">
         <TextView android:id="@+id/rb2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/badge_bg" android:paddingLeft="4dp" android:paddingRight="4dp" android:textColor="#FFFFFF" android:textSize="10sp" android:textStyle="bold" android:maxLines="1" android:visibility="gone" />
         <TextView android:id="@+id/re2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="1dp" android:textSize="10sp" android:maxLines="1" />
+        <ImageView android:id="@+id/ri2_0" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri2_1" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri2_2" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
     </LinearLayout>
     <LinearLayout android:id="@+id/rw3" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="1dp" android:visibility="gone">
         <TextView android:id="@+id/rb3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/badge_bg" android:paddingLeft="4dp" android:paddingRight="4dp" android:textColor="#FFFFFF" android:textSize="10sp" android:textStyle="bold" android:maxLines="1" android:visibility="gone" />
         <TextView android:id="@+id/re3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="1dp" android:textSize="10sp" android:maxLines="1" />
+        <ImageView android:id="@+id/ri3_0" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri3_1" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri3_2" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
     </LinearLayout>
     <LinearLayout android:id="@+id/rw4" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="1dp" android:visibility="gone">
         <TextView android:id="@+id/rb4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/badge_bg" android:paddingLeft="4dp" android:paddingRight="4dp" android:textColor="#FFFFFF" android:textSize="10sp" android:textStyle="bold" android:maxLines="1" android:visibility="gone" />
         <TextView android:id="@+id/re4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="1dp" android:textSize="10sp" android:maxLines="1" />
+        <ImageView android:id="@+id/ri4_0" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri4_1" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri4_2" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
     </LinearLayout>
     <LinearLayout android:id="@+id/rw5" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="1dp" android:visibility="gone">
         <TextView android:id="@+id/rb5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/badge_bg" android:paddingLeft="4dp" android:paddingRight="4dp" android:textColor="#FFFFFF" android:textSize="10sp" android:textStyle="bold" android:maxLines="1" android:visibility="gone" />
         <TextView android:id="@+id/re5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="1dp" android:textSize="10sp" android:maxLines="1" />
+        <ImageView android:id="@+id/ri5_0" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri5_1" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
+        <ImageView android:id="@+id/ri5_2" android:layout_width="12dp" android:layout_height="12dp" android:layout_marginLeft="1dp" android:scaleType="fitCenter" android:visibility="gone" />
     </LinearLayout>
 </LinearLayout>
