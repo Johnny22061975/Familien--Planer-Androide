@@ -35,7 +35,7 @@ object EmoIcons {
             } catch (e: Exception) { HashMap() }
             map = m
         }
-        return m[key(e)]
+        return m?.get(key(e))
     }
 }
 
