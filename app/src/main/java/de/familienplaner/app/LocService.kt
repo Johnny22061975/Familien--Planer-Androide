@@ -107,8 +107,8 @@ class LocService : Service() {
         lm = m
         try { m.removeUpdates(listener) } catch (e: Exception) {}
         try {
-            if (m.isProviderEnabled(LocationManager.GPS_PROVIDER)) m.requestLocationUpdates(LocationManager.GPS_PROVIDER, 15000L, 0f, listener, Looper.getMainLooper())
-            if (m.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) m.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 15000L, 0f, listener, Looper.getMainLooper())
+            if (m.isProviderEnabled(LocationManager.GPS_PROVIDER)) m.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000L, 0f, listener, Looper.getMainLooper())
+            if (m.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) m.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 10000L, 0f, listener, Looper.getMainLooper())
         } catch (e: Exception) { }
     }
 
@@ -121,10 +121,14 @@ class LocService : Service() {
     private var acTok = ""
     private var acExp = 0L
     private var lastChk = 0L
+    private var lastGps = 0L
 
     private fun upload(l: Location) {
         val now = System.currentTimeMillis()
-        if (now - lastSent < 15000L) return // höchstens alle 15 Sekunden
+        // GPS ist genauer: ungenaue Funknetz-Werte nicht nehmen, solange GPS frische Werte liefert
+        if (l.provider == LocationManager.GPS_PROVIDER) lastGps = now
+        else if (now - lastGps < 20000L) return
+        if (now - lastSent < 5000L) return // höchstens alle 5 Sekunden
         if (lastSent > 0) {
             val d = FloatArray(1)
             Location.distanceBetween(lastLat, lastLon, l.latitude, l.longitude, d)
